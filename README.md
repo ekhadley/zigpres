@@ -1,4 +1,4 @@
-<img src=".\assets\zig.png" alt="drawing" width="500"/>
+<img src=".\assets\zig.png" alt="drawing" width="800"/>
 
 ### Zig Language
 
