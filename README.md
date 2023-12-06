@@ -74,14 +74,9 @@ pub fn heaps(word: []u8, n: usize) void {
     }
 }
 
-pub fn literalToArray(comptime n: usize, word: *const [n:0]u8) [n]u8{
-    return word.*;
-}
-
 pub fn main() void {
-    var word = "cat";
-    var string = literalToArray(word.len, word);
-    heaps(&string, word.len-1);
+    var word = "zig".*;
+    heaps(&word, word.len-1);
 }
 ```
 
@@ -89,34 +84,63 @@ Output:
 
 ```zig
 PS D:\wgmn\zigpres> D:\zig\zig.exe run .\hello.zig
-act
-tca
-cta
-atc
-tac
-```
-
-This program provides a good example to discuss arrays, slices, and 'strings'. In Zig, `[n]T` is an array of type `T` containing `n` elements. `[]T` gives us a slice. Most commonly, what is meant by a 'string' is a sequence (array or slice) of `u8`: unsigned 8 bit integers. A 'string literal', declared like `word` from our permutations example, is an array. `@TypeOf(word) == *const [3:0]u8`: an immutable pointer, pointing to a length-3 null terminated (thats the 0) array of bytes. A slice can be generated from an existing array like: `array[lower..upper]`. When created like this, the slice does not copy the underlying memory. Using an allocator to free memory gives us a slice by default. The difference in Zig is less pronounced than Go. The general rule is that a slice's bounds are known at runtime, and an array's at compile time.  
-
-The need for `literalToArray()` is shown by attempting the following:
+zig
+izg
+gzi
+zgi
+igz
+giz
+```  
+### Arrays/Slices  
+Our Heap's Algorithm example program provides a good place to discuss arrays, slices, and strings. In Zig, `[n]T` is an array of type `T` containing `n` elements. `[]T` gives us a slice. A slice can be generated from an existing array like: `array[lower..upper]`. When created like this, the slice does not copy the underlying memory. Using an allocator to free memory gives us a slice by default. The difference in Zig is less pronounced than Go. The general rule is that when a slice's bounds are known at compile time, we actually get a pointer that directs us to some points in the underlying array. To demonstrate some of what Zig asks of us concerning types, lets ask: "zig" seems like a string. What if we just give the literal to the function directly?  
 ```zig
 pub fn main() void {
-    var word = "cat";
+    var word = "zig";
     heaps(word, word.len-1);
 }
-```
-
-Gives us:
-
+```   
+Gives us:  
 ```zig
 PS D:\wgmn\zigpres> D:\zig\zig.exe run .\hello.zig
-hello.zig:35:11: error: expected type '[]u8', found '*const [3:0]u8'
+hello.zig:38:11: error: expected type '[]u8', found '*const [3:0]u8'
     heaps(word, word.len-1);
           ^~~~
-hello.zig:35:11: note: cast discards const qualifier
+hello.zig:38:11: note: cast discards const qualifier
 hello.zig:11:20: note: parameter type declared here
 pub fn heaps(word: []u8, n: usize) void {
                    ^~~~
-```
+```  
+We get a complaint from the compiler. Zig has no proper String type. What is usually meant by a 'string' is a sequence (array or slice) of `u8`: unsigned 8 bit integers. A 'string literal', declared like `word` from our permutations example, is an array. `@TypeOf(word) == *const [3:0]u8`: an immutable pointer, pointing to a length-3 null terminated (thats the 0) array of bytes. Note that despite declaring with `var`, we get a `*const`, a 'constant pointer', not a pointer to a constant (`const *T`) nor a pointer to an array of constant values (`const *[_]T`). I find the difference between a pointer and an array to be subtle: our permutation function expects a `[]u8` (u8 slice, essentially a pointer and a length). It doesn't seem to like that we gave it an array (compile-time-known length), located by a `*const` instead of a normal pointer. So let's attempt to coerce our type. If we pass instead the data pointed to by word: `word.*`, We are presented with the helpful: ```error: array literal requires address-of operator (&) to coerce to slice type '[]u8'```.  Which is why we choose to assign like `var word = "zig".*` , and call like `heaps(&word, word.len - 1)`. Assigning to a literal gives us a `*const` to an array, so we have to reference then dereference before Zig is comfortable coercing our pointer into a slice.
 
-We get a complaint from the compiler. We told it to expect a slice of `u8`, and instead we got a `*const`
+## Allocators  
+Allocators are Zig's main method of ~manual memory management. Allocators are used to allocate memory, and greatly simplify the process of keeping track of and freeing your memory. There are several kinds of allocators and strategies one can employ using them:
+- `std.heap.page_allocator`: A common and generic allocator. Asks the OS for large chunks of memory, even for small allocations. Talking to the OS makes this allocator relatively slow.
+- `std.heap.FixedBufferAllocator`: Does not use the heap, allocates to a fixed buffer.
+- `std.heap.GeneralPurposeAllocator`: Zig's general purpose allocator. Designed to be safe and fast. Checks for use of freed memory, memory leaks, etc. 
+- `std.heap.c_allocator`: For those who like to live dangerously: extremely fast, but with essentially 0 safety checks.
+-`std.heap.ArenaAllocator()`: Takes another allocator as argument, and can use it to make multiple instances of that given allocator type. The Arena allocator is able to free all memory allocated by its children with one call.
+
+Freeing and writing a string with the `GeneralPurposeAllocator` looks like this:
+```zig
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{.verbose_log=true}){};
+    const alloc = gpa.allocator();
+
+    const mem = try alloc.alloc(u8, 10);
+    
+    var i: u8 = 0;
+    for (0..mem.len) |j| {
+        mem[j] = i;
+        print("{}", .{i});
+        i += 1;
+    }
+    print("{s}, {}, {}", .{mem, @TypeOf(mem), mem.len});
+}
+```
+Output:
+```zig
+PS D:\wgmn\zigpres> D:\zig\zig.exe run .\ex.zig
+info(gpa): small alloc 10 bytes at u8@28ac8970000
+0123456789☺☻♥♦♣♠, []u8, 10
+```
+Note how we instantiated `gpa`. We passed an empty tuple to 

@@ -24,17 +24,16 @@ pub fn heaps(word: []u8, n: usize) void {
     }
 }
 
-pub fn literalToArray(comptime n: usize, word: *const [n:0]u8) [n]u8{
-    return word.*;
-}
+pub fn main() !void {
+    var word = "zig".*;
+    heaps(&word, word.len-1);
 
-pub fn main() void {
-    const word = "cat";
-    //var string = literalToArray(word.len, word);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
 
-    heaps(word, word.len-1);
-
-    //print("word:{}, &word:{}\n", .{@TypeOf(word), @TypeOf(&word)});
-    //print("string:{}, &string:{}\n", .{@TypeOf(string), @TypeOf(&string)});
-
+    var args = try std.process.argsWithAllocator(alloc);
+    while (args.next()) |arg| {
+        heaps(&arg, arg.len-1)
+        print("{s}, {}\n", .{arg, @TypeOf(arg)});
+    }
 }
