@@ -4,13 +4,13 @@
 
 Zig is “A general-purpose programming language and toolchain for maintaining robust, optimal, and reusable software”. It aims to be pure and simple, but also drop in/take over existing C/Cpp seamlessly, and smooth the rough edges of these languages with some new ideas.
 
-**First appeared** 2017?
-**Designer Andrew** Kelley
-**Notable Versions** It's only 0.11 …
-**Recognized for** being a new systems language that isn’t Rust
-**Notable uses** maintaining existing codebases, compiling/cross compiling C
-**Tags** compiled, statically-typed, metaprogramming,  memory managed
-**Six words or less** “C, but with the problems fixed”, “Maintain it with Zig”
+**First appeared** 2017?  
+**Designer Andrew** Kelley  
+**Notable Versions** It's only 0.11 …  
+**Recognized for** being a new systems language that isn’t Rust  
+**Notable uses** maintaining existing codebases, compiling/cross compiling C  
+**Tags** compiled, statically-typed, metaprogramming,  memory managed  
+**Six words or less** “C, but with the problems fixed”, “Maintain it with Zig”  
 
 Zig is perhaps not best described as a “language”. Among Zig’s major endeavors is to seamlessly integrate with C codebases, which requires a bit more than just a language. Zig comes with a whole build system. A toolchain, and compiler. You can compile C with it, translate Zig into C, or C into Zig! Zig the language is interesting and deserving of merits on its own, but its supporting cast are essential and central to the Zig mission of superseding C while working with it seamlessly. Here I will mainly cover features of the language itself, apart from the C interop capabilities and toolchain/compiler capabilities.
 
@@ -44,9 +44,9 @@ pub fn main() void {
 }
 ```
 
-There is little to note, besides the printing syntax. `std.log()` is considered the proper way to report to the console, so `print` is relegated to debug. `print` automatically behaves like a formatted print. The second argument is an anonymous struct, (acting like a tuple) that holds all our values to be formatted.
+There is little to note, besides the printing syntax. `std.log()` is considered the proper way to report to the console, so `print` is relegated to debug. `print` automatically behaves like a formatted print. The second argument is an anonymous struct, (acting like a tuple) that bundles up all our values to be formatted.
 
-### Heap's Algorithm:
+### Heap's Algorithm
 
 ```zig
 
