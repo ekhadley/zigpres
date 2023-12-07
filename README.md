@@ -21,7 +21,7 @@ In Zig, errors are first class citizens, as are types. Passing around types and 
 
 Zig holds a more pragmatic take on safety (and correctness in general) than Rust. Zig appears to respect the fact that people are lazy, and while a select few programmers seem to enjoy fighting their borrow checkers, if you have to do extra work to make your program safe, a lot of people just won’t do it. Where Rust makes it harder to do things wrong, Zig instead makes it easier to do things right. C is notable for, among many other things, containing an entire arsenal with which to shoot yourself in the foot (or feet). Many of these foot guns revolve around manually allocating and freeing memory. Zig’s allocators are a novel take on management that makes the easiest way to do things the correct way. 
 
-My overview will begin with the classic examples, then cover arrays/slices/strings, comptime, try/errors, and allocators/defer.
+My overview will begin with the classic examples, then cover try and erorrs, structs/unions/enums, .
 
 ## Hello Zig
 
@@ -193,7 +193,7 @@ PS D:\wgmn\zigpres> D:\zig\zig.exe run .\comp.zig
 Note the use of `comptime` for the arguments `n` and `T`. Passing a type as a comptime parameter is a common idiom in Zig for making type-generic objects. As the name suggests, these arguments are collected at compile time, instead of runtime. Attempting to do things like this in C; declaring an array of a length given by a variable, even a constant one, will be met with resistance. Attempting to describe types with non-`comptime` variables is similairly disallowed in Zig. `comptime` is how we safely tell the compiler, 'don't worry, I'll give you this later'. The compiler can deduce that, when `matrix` is used in `main`, the comptime parameters `n` and `T` are 3 and `f64`. So the function that actually gets compiled, and the one that actually gets run at runtime is indistinguishable from if we wrote:
 ```zig
 pub fn matrix(alloc: std.mem.Allocator) ![3][3]f64 {
-    var m: [3][3]f64 = try alloc.alloc([f64]f64, 3);
+    var m: [3][3]f64 = try alloc.alloc([3]f64, 3);
 
     const e: f64 = 0;
     for (0..3) |j|{
@@ -212,14 +212,52 @@ pub fn main() !void {
     print("{d}\n", .{m});
 }
 ```
-, with all the `comptime` parameters replaced with the values we passed. If we called matrix again with different comptime parameters, say `n=6`, and `T=u321` (yes, an unsigned 321 bit integer), then a whole new function is compiled, looking like the above but with all `3`'s and `f64`'s replaced accordingly, and that version gets ran at runtime. If we called the function again, with say a different size and desired type, Then that. Note that we don't need to just pass literals for `comptime` arguments; any binding whose value can be deduced at compile time will do. There are several considerations for what can be properly run at compile time, and what can be passed as a comptime argument, but the basic case I just showed is extremely common, and a powerful pattern for intuitively and concisely creating safe and flexible data types and functions.  
-
-We can also match an input at comptime for conditional compilation:
+, with all the `comptime` parameters replaced with the values we passed. If we called matrix again with different comptime parameters, say `n=6`, and `T=u321` (yes, an unsigned 321 bit integer), then a whole new function is compiled, looking like the above but with all `3`'s and `f64`'s replaced accordingly, and that version gets ran at runtime. Note that we don't need to just pass literals for `comptime` arguments; any binding whose value can be deduced at compile time will do. There are several considerations for what can be properly run at compile time, and what can be passed as a comptime argument, but the basic case I just showed is extremely common, and a powerful pattern for intuitively and concisely creating safe and flexible data types and functions.  
+Zig compiling optimizations can also include trimming if/switch branches. If a `comptime` arg is used a condition, then we know at comptime if the condition is true, so we can only compile the branch we know will be taken and ignore the rest. Something like:
 ```zig
-pub fn 
+pub fn print_uints(comptime T: type, x: T) void {
+    switch (T) {
+        u16 => print("x is a u16 = {d}\n", .{x}),
+        u32 => print("x is a u32 = {d}\n", .{x}),
+        u64 => print("x is a 64 = {d}\n", .{x}),
+        f16,f32,f64,f128 => print("hey, this isnt a uint..\n", .{}),
+        else => {},
+        }
+}
+pub fn main() !void {
+    // this version compiles like `pub fn print_uints(x:u32)void {print( "x is a u32 = {d}\n", .{x}) }`
+    print_uints(u32, 1000); 
+    // and this one like `pub fn print_uints(x:f128)void {print( "hey, this isnt a uint..\n", .{}) }`
+    print_uints(f128, 10.5);
+}
 ```
+## Errors
+As stated before, errors in zig are first-class citizens. The error handling system is simple and intuitive. We do not throw exceptions in Zig; errors within a function become the returned value of the calling function. Consider the following:
+```zig
+const std = @import("std");
+const print = std.debug.print;
 
+const medianError = error{noMiddleElem, emptyArray};
 
+pub fn median(comptime T: type, comptime n: usize, arr: [n]T) medianError!T {
+    if (n == 0) { return medianError.emptyArray; }
+    if (n % 2 == 0) { return medianError.noMiddleElem; }
+    return arr[n/2];
+}
 
-
-
+pub fn main() !void {
+    const a = [_]f32{4, 5, 6, 7, 8};
+    
+    const middle = try median(f32, a.len, a);
+    print("the median of {d} is {}\n", .{a, middle});
+}
+```
+Instead of panicking or 'throwing' an error: our functions *return* errors, which are really just special kinds of enums. The expression `medianError!T` specifies an 'error union': it couples the possible errors with the 'intended' return type. Saying `!T` is the same as using the keyword `anyerror!T`. Because `median` is stated to possibly return errors, we must call it with a `try`. What `try` says is that we will attempt to call the function and proceed normally if it does not error, or make the error the return of the calling function. This is why `main` must state its return type as `!void`, despite lacking any error returns.  
+If we attempt to set the main function's return type as just `void`, we fail to compile:
+```zig
+errors.zig:16:20: error: expected type 'void', found 'error{noMiddleElem,emptyArray}'
+    const middle = try median(f32, a.len, a);
+                   ^~~~~~~~~~~~~~~~~~~~~~~~~
+errors.zig:13:15: note: function cannot return an error
+```
+The compiler sees that we are `try`ing to run our median function, meaning we know errors are a possibility, but main is not prepared to return anything but `void`. A side effect of our comptime length `n`, is that we actually know at compile time, not runtime, what return types are possible from median. If we only state `median`'s return type as T, `main`'s as `void` and get rid of the `try`, then as is, our compiler will create a version of `median` that excludes the error returns as a possibility, and all is good. If we then changed the length of `a` to be an even number or 0, becuase `n` is `comptime`, before we even run the function, Zig knows will error, and that our stated return types are inappropriate.

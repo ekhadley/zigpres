@@ -13,15 +13,13 @@ pub fn matrix(alloc: std.mem.Allocator, comptime n: usize, comptime T: type) ![]
     return m;
 }
 
-pub fn morebits(comptime T: type)
-
 pub fn main() !void {
     @setRuntimeSafety(true);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const alloc = gpa.allocator();
 
     const known: f64 = 3.0;
-    const m = try matrix(alloc, known, f32);
+    const m = try matrix(alloc, known, f64);
 
     print("{d}\n", .{m});
     print("{d}\n", .{m[0]});
