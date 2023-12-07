@@ -33,7 +33,6 @@ pub fn main() !void {
 
     var args = try std.process.argsWithAllocator(alloc);
     while (args.next()) |arg| {
-        heaps(&arg, arg.len-1)
         print("{s}, {}\n", .{arg, @TypeOf(arg)});
     }
 }

@@ -44,9 +44,9 @@ pub fn main() void {
 }
 ```
 
-There is little to note, besides the printing syntax. `std.log()` is considered the proper way to report to the console, so `print` is relegated to debug. `print` automatically behaves like a formatted print. The second argument is an anonymous struct, (acting like a tuple) that bundles up all our values to be formatted.
+There is little to note, besides the printing syntax. `std.log()` is considered the proper way to report to the console, so `print` is relegated to debug. `print` automatically behaves like a formatted print. The second argument is an anonymous (literal) struct, (which is what we mean by a tuple in Zig) which are useful for bundling up arguments. Tuples can be iterated over, and anonymous fields (like used in the print statement) can be accessed like `@"0"`, `@"1"`, or posess names, which we show later.
 
-### Heap's Algorithm
+### Word Permutations
 
 ```zig
 const std = @import("std");
@@ -92,7 +92,7 @@ igz
 giz
 ```  
 ### Arrays/Slices  
-Our Heap's Algorithm example program provides a good place to discuss arrays, slices, and strings. In Zig, `[n]T` is an array of type `T` containing `n` elements. `[]T` gives us a slice. A slice can be generated from an existing array like: `array[lower..upper]`. When created like this, the slice does not copy the underlying memory. Using an allocator to free memory gives us a slice by default. The difference in Zig is less pronounced than Go. The general rule is that when a slice's bounds are known at compile time, we actually get a pointer that directs us to some points in the underlying array. To demonstrate some of what Zig asks of us concerning types, lets ask: "zig" seems like a string. What if we just give the literal to the function directly?  
+Our Heap's Algorithm example program provides a good place to discuss arrays, slices, and strings. In Zig, `[n]T` is an array of type `T` containing `n` elements. `[]T` gives us a slice. A slice can be generated from an existing array like: `array[lower..upper]`. When created like this, the slice does not copy the underlying memory. `[*]T` is called a 'multi-item pointer'. It means it can act like a pointer to a single value, but will also allow us to index it like a sequence type. A slice `[]T` is more or less a `[*]T` paired with an integer to denote length. Using an allocator to free memory gives us a slice by default. Coercion between arrays and slices is subtle in Zig. The general rule is that when a slice's bounds are known at compile time, we actually get a pointer that directs us to some points in the underlying array. To demonstrate some of what Zig asks of us concerning types, lets ask: "zig" seems like a string. What if we just give the literal to the function directly?  
 ```zig
 pub fn main() void {
     var word = "zig";
@@ -110,7 +110,7 @@ hello.zig:11:20: note: parameter type declared here
 pub fn heaps(word: []u8, n: usize) void {
                    ^~~~
 ```  
-We get a complaint from the compiler. Zig has no proper String type. What is usually meant by a 'string' is a sequence (array or slice) of `u8`: unsigned 8 bit integers. A 'string literal', declared like `word` from our permutations example, is an array. `@TypeOf(word) == *const [3:0]u8`: an immutable pointer, pointing to a length-3 null terminated (thats the 0) array of bytes. Note that despite declaring with `var`, we get a `*const`, a 'constant pointer', not a pointer to a constant (`const *T`) nor a pointer to an array of constant values (`const *[_]T`). I find the difference between a pointer and an array to be subtle: our permutation function expects a `[]u8` (u8 slice, essentially a pointer and a length). It doesn't seem to like that we gave it an array (compile-time-known length), located by a `*const` instead of a normal pointer. So let's attempt to coerce our type. If we pass instead the data pointed to by word: `word.*`, We are presented with the helpful: ```error: array literal requires address-of operator (&) to coerce to slice type '[]u8'```.  Which is why we choose to assign like `var word = "zig".*` , and call like `heaps(&word, word.len - 1)`. Assigning to a literal gives us a `*const` to an array, so we have to reference then dereference before Zig is comfortable coercing our pointer into a slice.
+We get a complaint from the compiler. Zig has no proper String type. What is usually meant by a 'string' is a sequence (array or slice) of `u8`: unsigned 8 bit integers. A 'string literal', declared like `word` from our permutations example, is an array. `@TypeOf(word) == *const [3:0]u8`: an immutable pointer, pointing to a length-3 null terminated (thats the 0) array of bytes. Note that despite declaring with `var`, we get a `*const`, a 'constant pointer', not a pointer to a constant (`const *T`) nor a pointer to an array of constant values (`const *[_]T`). I find the difference between a pointer and an array to be subtle: our permutation function expects a `[]u8` (u8 slice, essentially a pointer and a length). It doesn't seem to like that we gave it an array (compile-time-known length), located by a `*const` instead of a normal pointer. So let's attempt to coerce our type. If we pass instead the data pointed to by word: `word.*`, We are presented with the helpful: ```error: array literal requires address-of operator (&) to coerce to slice type '[]u8'```.  Which is why we choose to assign like `var word = "zig".*` , and call like `heaps(&word, word.len - 1)`. Assigning to a literal gives us a `*const` to an array, so we have to reference then dereference before Zig is comfortable coercing our pointer into a slice.  
 
 ## Allocators  
 Allocators are Zig's main method of ~manual memory management. Allocators are used to allocate memory, and greatly simplify the process of keeping track of and freeing your memory. There are several kinds of allocators and strategies one can employ using them:
@@ -118,7 +118,7 @@ Allocators are Zig's main method of ~manual memory management. Allocators are us
 - `std.heap.FixedBufferAllocator`: Does not use the heap, allocates to a fixed buffer.
 - `std.heap.GeneralPurposeAllocator`: Zig's general purpose allocator. Designed to be safe and fast. Checks for use of freed memory, memory leaks, etc. 
 - `std.heap.c_allocator`: For those who like to live dangerously: extremely fast, but with essentially 0 safety checks.
--`std.heap.ArenaAllocator()`: Takes another allocator as argument, and can use it to make multiple instances of that given allocator type. The Arena allocator is able to free all memory allocated by its children with one call.
+- `std.heap.ArenaAllocator()`: Takes another allocator as argument, and can use it to make multiple instances of that given allocator type. The Arena allocator is able to free all memory allocated by its children with one call.
 
 Freeing and writing a string with the `GeneralPurposeAllocator` looks like this:
 ```zig
@@ -127,6 +127,7 @@ pub fn main() !void {
     const alloc = gpa.allocator();
 
     const mem = try alloc.alloc(u8, 10);
+    defer alloc.free(mem);
     
     var i: u8 = 0;
     for (0..mem.len) |j| {
@@ -136,6 +137,7 @@ pub fn main() !void {
     }
     print("{s}, {}, {}", .{mem, @TypeOf(mem), mem.len});
 }
+}
 ```
 Output:
 ```zig
@@ -143,4 +145,19 @@ PS D:\wgmn\zigpres> D:\zig\zig.exe run .\ex.zig
 info(gpa): small alloc 10 bytes at u8@28ac8970000
 0123456789☺☻♥♦♣♠, []u8, 10
 ```
-Note how we instantiated `gpa`. We passed an empty tuple to 
+Notice the new occurence of a literal struct for instantiating our `std.heap.GeneralPurposeAllocator`. This time we are using named fields where we assign values, optionally ovewriting the defaults. Some options for `gpa` are verbose logging (turned on here), `.safety`, `.never_unmap`, and `.enable_memory_limit`, etc, to tune the safety/performance characteristics.
+
+A very common Zig pattern is an `alloc` followed by a `defer` freeing the memory. A statement or block preceded by `defer` will not be run until the program execution leaves the block the defer was typed in. Multiple `defer`s in a block will be executed in reverse order. What this defer pattern allows us to do is avoid if/else chains for handling and freeing memory many lines away from where it is allocated. It simplifies the task of safe handling. Another common pattern is passing our allocator to a function. The function uses the allocator to allocate and then defer whatever it needs, and when we return from the function we know that memory will be safely freed. I excluded it from our word permutations example to highlight literals/arrays, but reading from command line args looks like this:
+```zig
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
+
+    var args = try std.process.argsWithAllocator(alloc);
+
+    while (args.next()) |arg| {
+        print("{s}, ", .{arg});
+    }
+}
+```
+We create an allocator, give it the characteristics we desire, then pass that allocator to subsequent functions which need to allocate, letting us easily change the memory handling profile of our code and external/builtin functions by specifying behavior in one spot.
