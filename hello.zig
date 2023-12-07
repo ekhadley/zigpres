@@ -27,12 +27,4 @@ pub fn heaps(word: []u8, n: usize) void {
 pub fn main() !void {
     var word = "zig".*;
     heaps(&word, word.len-1);
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const alloc = gpa.allocator();
-
-    var args = try std.process.argsWithAllocator(alloc);
-    while (args.next()) |arg| {
-        print("{s}, {}\n", .{arg, @TypeOf(arg)});
-    }
 }

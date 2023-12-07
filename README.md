@@ -137,7 +137,6 @@ pub fn main() !void {
     }
     print("{s}, {}, {}", .{mem, @TypeOf(mem), mem.len});
 }
-}
 ```
 Output:
 ```zig
