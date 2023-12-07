@@ -7,19 +7,19 @@ Zig is “A general-purpose programming language and toolchain for maintaining r
 **First appeared** 2017?  
 **Designer Andrew** Kelley  
 **Notable Versions** It's only 0.11 …  
-**Recognized for** being a new systems language that isn’t Rust  
+**Recognized for** not being Rust  
 **Notable uses** maintaining existing codebases, compiling/cross compiling C  
 **Tags** compiled, statically-typed, metaprogramming,  memory managed  
 **Six words or less** “C, but with the problems fixed”, “Maintain it with Zig”  
 
 The Zig project is perhaps not best described as a “language”. Among the project's major endeavors is to seamlessly integrate with C codebases, which requires a bit more than just a language. Zig comes with a whole build system. A toolchain, and compiler. You can compile C with it, translate Zig into C, or C into Zig! Zig the language is interesting and deserving of merits on its own, but its supporting cast are essential and central to the Zig mission of superseding C while working with it seamlessly. Here I will mainly cover features of the language itself, apart from the C interop capabilities and toolchain/compiler capabilities.
 
-It should be mentioned that this project is early, coming up on version 1.0. Some of the features I mention
+It should be mentioned that this project is early, only coming up on version 1.0. Some of the features I mention
 are actually planned features, possibly liable to change or exclusion from later versions. I am also not experienced in systems languages; during my testing I encountered many error messages I found odd or cryptic. I suspect some of these were not errors that “should” be happening (that would not happen in a later, more mature version of Zig), but it is hard for me to tell.
 
 In Zig, errors are first class citizens, as are types. Passing around types and errors like any other value are essential parts of ensuring code is correct, and handles errors gracefully. Perhaps Zig’s most mentioned feature is `comptime`: a keyword that allows arbitrary code to be executed at compile time. It lets us reassure the compiler that a type passed as a function argument will be known later. This feature, along with `var`\\`const` for denoting mutability, and other design decisions lets Zig be expressive while still aggressivley optimizing during compilation.
 
-Zig holds a more pragmatic take on safety (and correctness in general) than Rust. Zig appears to respect the fact that people are lazy, and while a select few programmers seem to enjoy fighting their borrow checkers, if you have to do extra work to make your program safe, a lot of people just won’t do it. Where Rust makes it harder to do things wrong, Zig instead makes it easier to do things right. C is notable for, among many other things, containing an entire arsenal with which to shoot yourself in the foot (or feet). Many of these foot guns revolve around manually allocating and freeing memory. Zig’s allocators are a novel form of management that makes the simplest way to do something the correct way. 
+Zig holds a more pragmatic take on safety (and correctness in general) than Rust. Zig appears to respect the fact that people are lazy, and while a select few programmers seem to enjoy fighting their borrow checkers, if you have to do extra work to make your program safe, a lot of people just won’t do it. Where Rust makes it harder to do things wrong, Zig instead makes it easier to do things right. C is notable for, among many other things, containing an entire arsenal with which to shoot yourself in the foot (or feet). Many of these foot guns revolve around manually allocating and freeing memory. Zig’s allocators are a novel take on management that makes the easiest way to do things the correct way. 
 
 My overview will begin with the classic examples, then cover arrays/slices/strings, comptime, try/errors, and allocators/defer.
 
@@ -117,8 +117,8 @@ Allocators are Zig's main method of ~manual memory management. Allocators are us
 - `std.heap.page_allocator`: A common and generic allocator. Asks the OS for large chunks of memory, even for small allocations. Talking to the OS makes this allocator relatively slow.
 - `std.heap.FixedBufferAllocator`: Does not use the heap, allocates to a fixed buffer.
 - `std.heap.GeneralPurposeAllocator`: Zig's general purpose allocator. Designed to be safe and fast. Checks for use of freed memory, memory leaks, etc. 
-- `std.heap.c_allocator`: For those who like to live dangerously: extremely fast, but with essentially 0 safety checks.
-- `std.heap.ArenaAllocator()`: Takes another allocator as argument, and can use it to make multiple instances of that given allocator type. The Arena allocator is able to free all memory allocated by its children with one call.
+- `std.heap.c_allocator`: For those who like to live dangerously: extremely fast, but (because of) essentially 0 safety checks.
+- `std.heap.ArenaAllocator()`: Takes another allocator as argument. Use this to make multiple instances of that given allocator type. The arena allocator is able to free all memory allocated by its children with one call.
 
 Freeing and writing a string with the `GeneralPurposeAllocator` looks like this:
 ```zig
@@ -140,7 +140,7 @@ pub fn main() !void {
 ```
 Output:
 ```zig
-PS D:\wgmn\zigpres> D:\zig\zig.exe run .\ex.zig
+PS D:\wgmn\zigpres> D:\zig\zig.exe run .\alloc.zig
 info(gpa): small alloc 10 bytes at u8@28ac8970000
 0123456789☺☻♥♦♣♠, []u8, 10
 ```
@@ -153,10 +153,73 @@ pub fn main() !void {
     const alloc = gpa.allocator();
 
     var args = try std.process.argsWithAllocator(alloc);
+    defer args.deinit();
 
     while (args.next()) |arg| {
         print("{s}, ", .{arg});
     }
 }
 ```
-We create an allocator, give it the characteristics we desire, then pass that allocator to subsequent functions which need to allocate, letting us easily change the memory handling profile of our code and external/builtin functions by specifying behavior in one spot.
+We create an allocator, give it the characteristics we desire, then pass that allocator to subsequent functions which need to allocate, letting us easily change the memory handling profile of our code and external/builtin functions by specifying behavior in one spot. And don't forget the `defer` statement here, ensuring that the memory allocated for our args is freed automatically when we exit the scope where it is used.
+
+## Comptime!
+`Comptime` is perhaps Zig's most well known and highly praised feature. Comptime allows us to execute arbitrary code at compile time. It is Zig's iteration on C's macros, which plague larger and older codebases, using their own preprocessor-mini-language, and which make debugging notoriously difficult. Consider the following function for making 2D arrays:
+```zig
+pub fn matrix(alloc: std.mem.Allocator, comptime n: usize, comptime T: type) ![n][n]T {
+    var m: [n][n]T = try alloc.alloc([n]T, n);
+
+    const e: T = 0;
+    for (0..n) |j|{
+        for (0..n) |i| {
+            m[j][i] = e;
+        }
+    }
+    return m;
+}
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
+
+    const m = try matrix(alloc, 3, f64);
+
+    print("{d}\n", .{m});
+}
+```
+Output:
+```zig
+PS D:\wgmn\zigpres> D:\zig\zig.exe run .\comp.zig
+{ { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } }
+```
+Note the use of `comptime` for the arguments `n` and `T`. Passing a type as a comptime parameter is a common idiom in Zig for making type-generic objects. As the name suggests, these arguments are collected at compile time, instead of runtime. Attempting to do things like this in C; declaring an array of a length given by a variable, even a constant one, will be met with resistance. Attempting to describe types with non-`comptime` variables is similairly disallowed in Zig. `comptime` is how we safely tell the compiler, 'don't worry, I'll give you this later'. The compiler can deduce that, when `matrix` is used in `main`, the comptime parameters `n` and `T` are 3 and `f64`. So the function that actually gets compiled, and the one that actually gets run at runtime is indistinguishable from if we wrote:
+```zig
+pub fn matrix(alloc: std.mem.Allocator) ![3][3]f64 {
+    var m: [3][3]f64 = try alloc.alloc([f64]f64, 3);
+
+    const e: f64 = 0;
+    for (0..3) |j|{
+        for (0..3) |i| {
+            m[j][i] = e;
+        }
+    }
+    return m;
+}
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
+
+    const m = try matrix(alloc);
+
+    print("{d}\n", .{m});
+}
+```
+, with all the `comptime` parameters replaced with the values we passed. If we called matrix again with different comptime parameters, say `n=6`, and `T=u321` (yes, an unsigned 321 bit integer), then a whole new function is compiled, looking like the above but with all `3`'s and `f64`'s replaced accordingly, and that version gets ran at runtime. If we called the function again, with say a different size and desired type, Then that. Note that we don't need to just pass literals for `comptime` arguments; any binding whose value can be deduced at compile time will do. There are several considerations for what can be properly run at compile time, and what can be passed as a comptime argument, but the basic case I just showed is extremely common, and a powerful pattern for intuitively and concisely creating safe and flexible data types and functions.  
+
+We can also match an input at comptime for conditional compilation:
+```zig
+pub fn 
+```
+
+
+
+
+

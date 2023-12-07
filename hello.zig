@@ -24,7 +24,7 @@ pub fn heaps(word: []u8, n: usize) void {
     }
 }
 
-pub fn main() !void {
+pub fn main() void {
     var word = "zig".*;
     heaps(&word, word.len-1);
 }
