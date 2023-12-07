@@ -10,7 +10,7 @@ Zig is “A general-purpose programming language and toolchain for maintaining r
 **Recognized for** not being Rust  
 **Notable uses** maintaining existing codebases, compiling/cross compiling C  
 **Tags** compiled, statically-typed, metaprogramming,  memory managed  
-**Six words or less** “C, but with the problems fixed”, “Maintain it with Zig”  
+**Six words or less** “C, but with the problems fixed”  
 
 The Zig project is perhaps not best described as a “language”. Among the project's major endeavors is to seamlessly integrate with C codebases, which requires a bit more than just a language. Zig comes with a whole build system. A toolchain, and compiler. You can compile C with it, translate Zig into C, or C into Zig! Zig the language is interesting and deserving of merits on its own, but its supporting cast are essential and central to the Zig mission of superseding C while working with it seamlessly. Here I will mainly cover features of the language itself, apart from the C interop capabilities and toolchain/compiler capabilities.
 
@@ -20,8 +20,6 @@ are actually planned features, possibly liable to change or exclusion from later
 In Zig, errors are first class citizens, as are types. Passing around types and errors like any other value are essential parts of ensuring code is correct, and handles errors gracefully. Perhaps Zig’s most mentioned feature is `comptime`: a keyword that allows arbitrary code to be executed at compile time. It lets us reassure the compiler that a type passed as a function argument will be known later. This feature, along with `var`\\`const` for denoting mutability, and other design decisions lets Zig be expressive while still aggressivley optimizing during compilation.
 
 Zig holds a more pragmatic take on safety (and correctness in general) than Rust. Zig appears to respect the fact that people are lazy, and while a select few programmers seem to enjoy fighting their borrow checkers, if you have to do extra work to make your program safe, a lot of people just won’t do it. Where Rust makes it harder to do things wrong, Zig instead makes it easier to do things right. C is notable for, among many other things, containing an entire arsenal with which to shoot yourself in the foot (or feet). Many of these foot guns revolve around manually allocating and freeing memory. Zig’s allocators are a novel take on management that makes the easiest way to do things the correct way. 
-
-My overview will begin with the classic examples, then cover try and erorrs, structs/unions/enums, .
 
 ## Hello Zig
 
@@ -278,4 +276,108 @@ We make a string `b` with no median. The catch syntax lets us conveniently expre
 PS D:\wgmn\zigpres> D:\zig\zig.exe run .\errors.zig
 ♣♂♀♀♂♣ has no median!!! [failed with error.noMiddleElem]
 ```
-The double `|` is called a payload capture, which you may recognize from the for loop syntax. If you are still confused about `try`, it is really just a shortcut for a catch and capture: `try = x catch |err| return err`. Notice that we choose to return `void` after catching the error. We have no obligation to return caught errors. Returning the error itself would cause a proper thread panic.  
+The double `|` is called a payload capture, which you may recognize from the for loop syntax. If you are still confused about `try`, it is really just a shortcut for a catch and capture: `try {}` = `{} catch |err| return err`. Notice that we choose to return `void` after catching the error. We have no obligation to return caught errors. Returning the error itself would cause a proper thread panic.  
+
+
+### Unions, Enums, Structs, oh my
+Zig contains the big 3 of composite data types, present in most low level languages. They are designed to synergize powerfully with Zig's types, comptime, and error handling facilities. We begin with the simplest type: enums.
+##### Enums
+Enums work largely how you might expect from other languages. They are collections of fields with automatic or reassignable integer (by default) values:
+```zig
+const std = @import("std");
+const print = std.debug.print;
+
+const student = enum(u32){ freshman, sophomore, junior, senior, supersenior=1_000_000, hypersenior };
+
+pub fn main() !void {
+    print("student: {}, {}, {}, {}\n", .{student, @TypeOf(student), @TypeOf(student.sophomore), @intFromEnum(student.sophomore)});
+    
+    const ethan = student.senior;
+    print("ethan: {}, {},  {}\n", .{ethan, @TypeOf(ethan), @intFromEnum(ethan)});
+    
+    const nahte = student.supersenior;
+    print("nahte: {}, {},  {}\n", .{nahte, @TypeOf(nahte), @intFromEnum(nahte)});
+
+    const xX_EtHaN_Xx = student.hypersenior;
+    print("xX_EtHaN_Xx: {}, {},  {}\n", .{xX_EtHaN_Xx, @TypeOf(xX_EtHaN_Xx), @intFromEnum(xX_EtHaN_Xx)});
+}
+```
+Output:
+```zig
+PS D:\wgmn\zigpres> D:\zig\zig.exe run .\enum.zig
+student: enum.student, type, enum.student, 1
+ethan: enum.student.senior, enum.student,  3
+nahte: enum.student.supersenior, enum.student,  1000000
+xX_EtHaN_Xx: enum.student.hypersenior, enum.student,  1000001
+```
+We see here that enum qualifies as a new `type`. Also interestingly, we see that values of an enum coerce to the superclass: `@TypeOf(student.sophomore) == @TypeOf(student)`. Values all have an ordinal value, starting at 0 and counting . The `(u32)` signifier is not necessary unless we are reassigning the ordinal value of one of the values like we do with `student.supersenior`. We are only allowed to reassign values as integers, and we cannot assign a value to one already generated (like trying to assign supersenior's value to 0->3). And if we assign one value but not the next, the autoincrement picks up from the previous, giving us hypersenior's value.  
+There are several interesting properties of enums; they can contain methods, var and const variables, coercion rules, but they are excluded for brevity.
+#### Structs
+Structs, unlike enums, store a fixed (comptime known) number of fields. Structs can be declared as types, or instantiated anonymously, as we have seen in several places. Structs's fields must be declared with a type they will accept, but not with `var`\\`const`. Consider the `car` struct below:
+```zig
+const std = @import("std");
+const print = std.debug.print;
+
+const failedToDrive = error{noTiresError, negativeHorsepowerError};
+
+const car  = struct{
+    year: u32,
+    hp: u32,
+    ntires: u32,
+    name: []u8,
+    alloc: std.mem.Allocator = std.heap.page_allocator,
+
+    pub fn drive(self: *const car) !void {
+        if(self.ntires == 0) { return failedToDrive.noTiresError; }
+        if(self.hp < 0) { return failedToDrive.negativeHorsepowerError; }
+
+        var out = try self.alloc.alloc(u8, self.hp+3);
+        defer self.alloc.free(out);
+
+        out[0] = 'v';
+        out[1] = 'r';
+        for (0 .. self.hp+1) |i| {
+            out[i+2] = 'o';
+        }
+        out[self.hp+2] = 'm';
+
+        print("the {s} goes {s}\n", .{self.name, out});
+    }
+};
+
+pub fn main() !void {
+    var name = "accord".*;
+    const mycar = car{.year = 2005, .hp = 35, .ntires = 3, .name = &name};
+    mycar.drive() catch |err| {
+        switch (err) {
+            failedToDrive.noTiresError => print("{s} cannot drive without tires\n", .{mycar.name}),
+            failedToDrive.negativeHorsepowerError => print("{s} has negative horsepower!. refer to driveBackwards()\n", .{mycar.name}),
+            else => print("unknown error\n", .{}),
+        }
+        return;
+    };
+}
+```
+Output:
+```zig
+PS D:\wgmn\zigpres> D:\zig\zig.exe run .\struct.zig
+the accord goes vrooooooooooooooooooooooooooooooooooom
+```
+We have several features on display here. We declare our struct with the fields in the body: no init function. When initializing a `car` struct, we must pass all required fields by name or with order inferred. Structs allow default fields, as shown with the `std.heap.page_allocator`, which we don't need to provide (but can) on instantiation. We created a custom error type, and then handle the errors with the previously mentioned `switch` statement in our main.
+
+#### Unions
+Not covered due to lack of time :/
+
+## Wrap Up
+- While Zig is still in it's early stages, it is developing rapidly. The build system is already quite mature. It takes very little effort to get up and running in Zig
+- Zig is planned to have a fully fledged package manager.
+- A goal of Zig is to remain small, pragmatic, and pure, avoiding to add complexity to the language where it can just aska  bit more of the programmer (anti Cpp style)
+- We can use comptime to run generic code at compile time, and tell the compiler that an argument will be known when it is called, allowing powerful generic types and functions, without macros or great complexity.
+- Allocators allow us to safely be lazy, and dynamically choose the memory usage profile of code we, or others, wrote.
+- Errors are types! Errors are values our function must be ready to return in the form of a union. Error catching is intuitively done with `try` or `catch`
+- Structs work well with `comptime ` types to make generic and effecient data structures
+- C is dead. Long live Zig.
+
+
+
+
