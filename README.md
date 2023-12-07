@@ -248,16 +248,34 @@ pub fn median(comptime T: type, comptime n: usize, arr: [n]T) medianError!T {
 pub fn main() !void {
     const a = [_]f32{4, 5, 6, 7, 8};
     
-    const middle = try median(f32, a.len, a);
-    print("the median of {d} is {}\n", .{a, middle});
+    const mid= try median(f32, a.len, a);
+    print("the median of {d} is {}\n", .{a, mid});
 }
 ```
 Instead of panicking or 'throwing' an error: our functions *return* errors, which are really just special kinds of enums. The expression `medianError!T` specifies an 'error union': it couples the possible errors with the 'intended' return type. Saying `!T` is the same as using the keyword `anyerror!T`. Because `median` is stated to possibly return errors, we must call it with a `try`. What `try` says is that we will attempt to call the function and proceed normally if it does not error, or make the error the return of the calling function. This is why `main` must state its return type as `!void`, despite lacking any error returns.  
 If we attempt to set the main function's return type as just `void`, we fail to compile:
 ```zig
 errors.zig:16:20: error: expected type 'void', found 'error{noMiddleElem,emptyArray}'
-    const middle = try median(f32, a.len, a);
+    const mid= try median(f32, a.len, a);
                    ^~~~~~~~~~~~~~~~~~~~~~~~~
 errors.zig:13:15: note: function cannot return an error
 ```
-The compiler sees that we are `try`ing to run our median function, meaning we know errors are a possibility, but main is not prepared to return anything but `void`. A side effect of our comptime length `n`, is that we actually know at compile time, not runtime, what return types are possible from median. If we only state `median`'s return type as T, `main`'s as `void` and get rid of the `try`, then as is, our compiler will create a version of `median` that excludes the error returns as a possibility, and all is good. If we then changed the length of `a` to be an even number or 0, becuase `n` is `comptime`, before we even run the function, Zig knows will error, and that our stated return types are inappropriate.
+The compiler sees that we are `try`ing to run our median function, meaning we know errors are a possibility, but main is not prepared to return anything but `void`. A side effect of our comptime length `n`, is that we actually know at compile time, not runtime, what return types are possible from median. If we only state `median`'s return type as T, `main`'s as `void` and get rid of the `try`, then as is, our compiler will create a version of `median` that excludes the error returns as a possibility, and all is good. If we then changed the length of `a` to be an even number or 0, becuase `n` is `comptime`, before we even run the function, Zig knows will error, and that our stated return types are inappropriate.  
+
+If we wish to handle errors more specifically, without breaking out to the parent function, we have `catch`:
+```zig
+pub fn main() !void {
+    const b = [_]u8{5, 11, 12, 12, 11, 5};
+    const bmid = median(u8, b.len, b) catch |err| {
+        print("{s} has no median!!! [failed with {}]", .{b, err});
+        return;
+    };
+    print("end of main: {}\n", .{bmid});
+}
+```
+We make a string `b` with no median. The catch syntax lets us conveniently express the common code phrase 'assign if I can, otherwise let me check the error'. The above outputs:
+```zig
+PS D:\wgmn\zigpres> D:\zig\zig.exe run .\errors.zig
+♣♂♀♀♂♣ has no median!!! [failed with error.noMiddleElem]
+```
+The double `|` is called a payload capture, which you may recognize from the for loop syntax. If you are still confused about `try`, it is really just a shortcut for a catch and capture: `try = x catch |err| return err`. Notice that we choose to return `void` after catching the error. We have no obligation to return caught errors. Returning the error itself would cause a proper thread panic.  
