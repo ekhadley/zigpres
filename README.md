@@ -1,6 +1,7 @@
 <img src=".\assets\zig.png" alt="zig_logo" width="600" justify-center/>
 
 ### Zig Language
+<sub> This readme, and some of the test snippets can be found at [zigpres](https://github.com/ekhadley/zigpres) <sub>
 
 Zig is “A general-purpose programming language and toolchain for maintaining robust, optimal, and reusable software”. It aims to be pure and simple, but also drop in/take over existing C/Cpp seamlessly, and smooth the rough edges of these languages with some new ideas.
 
